@@ -561,6 +561,9 @@ app.get('/api/test', (req, res) => {
       res.status(500).json({ error: err.message });
     });
 });
+app.get('/',(req, res) => {
+  res.send('API IS WORKING');
+});
 
 // Error handling middleware
 app.use((err, req, res, next) => {
