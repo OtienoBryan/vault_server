@@ -30,14 +30,15 @@ app.use((req, res, next) => {
   }
   next();
 });
-// CORS configuration for all environments
-app.use((req, res, next) => {
-  const allowedOrigins = ['https://vault-client-navy.vercel.app', 'http://localhost:5173'];
-  const origin = req.headers.origin;
-  
-  if (allowedOrigins.includes(origin)) {
-    res.header('Access-Control-Allow-Origin', origin);
-  }
+
+// CORS configuration
+const corsOptions = {
+  origin: 'https://vault-client-navy.vercel.app',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+  optionsSuccessStatus: 200
+};
 
 // Middleware
 app.use(cors(corsOptions));
