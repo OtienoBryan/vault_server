@@ -21,7 +21,15 @@ const atmLoadingTableController = require('./controllers/atmLoadingTableControll
 require('dotenv').config();
 
 const app = express();
-
+// Add this at the top of server.js
+app.use((req, res, next) => {
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+  next();
+});
 // CORS configuration for all environments
 app.use((req, res, next) => {
   const allowedOrigins = ['https://vault-client-navy.vercel.app', 'http://localhost:5173'];
