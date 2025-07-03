@@ -33,13 +33,17 @@ app.use((req, res, next) => {
 
 // CORS configuration
 const corsOptions = {
-  origin: 'https://vault-client-navy.vercel.app',
+  origin: [
+    'https://vault-client-navy.vercel.app',
+    'https://vault-client.vercel.app',
+    'http://localhost:3000',
+    'http://localhost:5173'
+  ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
   optionsSuccessStatus: 200
 };
-
 // Middleware
 app.use(cors(corsOptions));
 app.use(express.json());
