@@ -21,16 +21,29 @@ const atmLoadingTableController = require('./controllers/atmLoadingTableControll
 require('dotenv').config();
 
 const app = express();
+// Add this at the top of server.js
+app.use((req, res, next) => {
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+  next();
+});
 
 // CORS configuration
 const corsOptions = {
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173', // Vite's default port
+  origin: [
+    'https://vault-client-navy.vercel.app',
+    'https://vault-client.vercel.app',
+    'http://localhost:3000',
+    'http://localhost:5173'
+  ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
   optionsSuccessStatus: 200
 };
-
 // Middleware
 app.use(cors(corsOptions));
 app.use(express.json());
@@ -560,6 +573,9 @@ app.get('/api/test', (req, res) => {
     .catch(err => {
       res.status(500).json({ error: err.message });
     });
+});
+app.get('/',(req, res) => {
+  res.send('API IS WORKING');
 });
 
 // Error handling middleware
