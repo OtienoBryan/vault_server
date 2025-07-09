@@ -429,7 +429,7 @@ app.get('/api/runs/summaries', async (req, res) => {
       SELECT 
         DATE(pickup_date) as date,
         COUNT(*) as totalRuns,
-        SUM(CASE WHEN status = 'completed' THEN price ELSE 0 END) as totalAmount
+        SUM(price) as totalAmount
       FROM requests r
       LEFT JOIN branches b ON r.branch_id = b.id
       WHERE r.my_status = 3
