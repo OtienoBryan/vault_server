@@ -18,34 +18,14 @@ const vaultController = require('./controllers/vaultController');
 const cashProcessingController = require('./controllers/cashProcessingController');
 const clientUpdateController = require('./controllers/clientUpdateController');
 const atmLoadingTableController = require('./controllers/atmLoadingTableController');
+const authController = require('./controllers/authController');
 require('dotenv').config();
 
 const app = express();
-// Add this at the top of server.js
-app.use((req, res, next) => {
-  // Handle preflight requests
-  if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
-  }
-  next();
-});
 
-// CORS configuration
-const corsOptions = {
-  origin: [
-    'https://vault-client-navy.vercel.app',
-    'https://vault-client.vercel.app',
-    'http://localhost:3000',
-    'http://localhost:5173'
-  ],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true,
-  optionsSuccessStatus: 200
-};
-// Middleware
-app.use(cors(corsOptions));
+// CORS: allow all origins for debugging
+app.use(cors({ origin: true, credentials: true }));
+
 app.use(express.json());
 
 // Helper function to map database fields to frontend fields
@@ -74,69 +54,9 @@ const mapRequestFields = (request) => ({
 });
 
 // Auth routes
-app.post('/api/auth/login', async (req, res) => {
-  try {
-    console.log('Login attempt received:', req.body);
-    const { username, password } = req.body;
-
-    if (!username || !password) {
-      console.log('Missing username or password');
-      return res.status(400).json({ message: 'Username and password are required' });
-    }
-
-    // Get user from database
-    console.log('Querying database for user:', username);
-    const [users] = await db.query(
-      'SELECT * FROM vault_users WHERE username = ?',
-      [username]
-    );
-
-    console.log('Database query result:', users);
-
-    if (users.length === 0) {
-      console.log('No user found with username:', username);
-      return res.status(401).json({ message: 'Invalid credentials' });
-    }
-
-    const user = users[0];
-
-    // Compare password
-    console.log('Comparing passwords...');
-    const isValidPassword = await bcrypt.compare(password, user.password);
-    console.log('Password comparison result:', isValidPassword);
-
-    if (!isValidPassword) {
-      console.log('Invalid password for user:', username);
-      return res.status(401).json({ message: 'Invalid credentials' });
-    }
-
-    // Create JWT token
-    console.log('Creating JWT token for user:', username);
-    const token = jwt.sign(
-      { 
-        userId: user.id,
-        username: user.username,
-        role: user.role 
-      },
-      process.env.JWT_SECRET || 'your-secret-key',
-      { expiresIn: '24h' }
-    );
-
-    console.log('Login successful for user:', username);
-    res.json({
-      token,
-      user: {
-        id: user.id,
-        username: user.username,
-        email: user.email,
-        role: user.role
-      }
-    });
-  } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({ message: 'Internal server error' });
-  }
-});
+app.post('/api/auth/login', authController.login);
+app.put('/api/users/:id', authController.updateUser);
+app.put('/api/users/:id/password', authController.changePassword);
 
 // Service Types routes
 app.get('/api/service-types', async (req, res) => {
@@ -573,6 +493,9 @@ app.get('/api/test', (req, res) => {
     .catch(err => {
       res.status(500).json({ error: err.message });
     });
+});
+app.get('/test-cors', (req, res) => {
+  res.json({ message: 'CORS is working!' });
 });
 app.get('/',(req, res) => {
   res.send('API IS WORKING');
