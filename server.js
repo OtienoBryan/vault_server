@@ -16,6 +16,7 @@ const noticeController = require('./controllers/noticeController');
 const cashCountController = require('./controllers/cashCountController');
 const vaultController = require('./controllers/vaultController');
 const cashProcessingController = require('./controllers/cashProcessingController');
+const processingChargesController = require('./controllers/processingChargesController');
 const clientUpdateController = require('./controllers/clientUpdateController');
 const atmLoadingTableController = require('./controllers/atmLoadingTableController');
 const authController = require('./controllers/authController');
@@ -469,6 +470,14 @@ app.get('/api/cash-processing', cashProcessingController.getAllCashProcessing);
 app.get('/api/cash-processing/:id', cashProcessingController.getCashProcessingById);
 app.get('/api/cash-counts/:cashCountId/processing', cashProcessingController.getCashProcessingByCashCountId);
 app.post('/api/cash-processing', cashProcessingController.createCashProcessing);
+
+// Processing Charges routes
+app.get('/api/processing-charges', processingChargesController.getAllProcessingCharges);
+app.get('/api/processing-charges/:id', processingChargesController.getProcessingChargeById);
+app.get('/api/processing-charges/cash-processing/:cashProcessingId', processingChargesController.getProcessingChargesByCashProcessingId);
+app.post('/api/processing-charges', processingChargesController.createProcessingCharge);
+app.put('/api/processing-charges/:id', processingChargesController.updateProcessingCharge);
+app.delete('/api/processing-charges/:id', processingChargesController.deleteProcessingCharge);
 
 // Client Update routes
 app.get('/api/clients/:clientId/updates', clientUpdateController.getClientUpdates);

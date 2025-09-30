@@ -258,6 +258,23 @@ INSERT INTO roles (name, description) VALUES
 ('Supervisor', 'Team supervisor position')
 ON DUPLICATE KEY UPDATE id=id;
 
+-- Create processing_charges table
+CREATE TABLE IF NOT EXISTS processing_charges (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  cash_processing_id INT NOT NULL,
+  total_amount DECIMAL(15, 2) NOT NULL,
+  processing_fee_percentage DECIMAL(5, 2) NOT NULL,
+  processing_fee_amount DECIMAL(15, 2) NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (cash_processing_id) REFERENCES cash_processing(id) ON DELETE CASCADE
+);
+
+-- Add seal number columns to cash_processing table
+ALTER TABLE cash_processing ADD COLUMN IF NOT EXISTS original_seal_number VARCHAR(255);
+ALTER TABLE cash_processing ADD COLUMN IF NOT EXISTS new_seal_number VARCHAR(255);
+ALTER TABLE cash_processing ADD COLUMN IF NOT EXISTS processed_by INT;
+
 -- Insert initial vault data
 INSERT INTO vault (id, name, current_balance) VALUES 
 (1, 'Vault 1', 0.00)

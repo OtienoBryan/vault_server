@@ -13,7 +13,10 @@ const cashProcessingController = {
         matched,
         expected_denominations,
         processed_denominations,
-        comment
+        comment,
+        original_seal_number,
+        new_seal_number,
+        processed_by
       } = req.body;
 
       // Validate required fields
@@ -29,8 +32,8 @@ const cashProcessingController = {
           expected_fifties, expected_hundreds, expected_twoHundreds, expected_fiveHundreds, expected_thousands,
           processed_ones, processed_fives, processed_tens, processed_twenties, processed_forties,
           processed_fifties, processed_hundreds, processed_twoHundreds, processed_fiveHundreds, processed_thousands,
-          comment
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          comment, original_seal_number, new_seal_number, processed_by
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
         cash_count_id, request_id, expected_total, processed_total, difference, matched,
         expected_denominations.ones || 0, expected_denominations.fives || 0, expected_denominations.tens || 0,
@@ -41,8 +44,18 @@ const cashProcessingController = {
         processed_denominations.twenties || 0, processed_denominations.forties || 0, processed_denominations.fifties || 0,
         processed_denominations.hundreds || 0, processed_denominations.twoHundreds || 0, processed_denominations.fiveHundreds || 0,
         processed_denominations.thousands || 0,
-        comment
+        comment, original_seal_number, new_seal_number, processed_by
       ]);
+
+      // Create processing charge record
+      const processingFeePercentage = 2.5; // Default 2.5% processing fee
+      const processingFeeAmount = (processed_total * processingFeePercentage) / 100;
+      
+      await db.query(`
+        INSERT INTO processing_charges (
+          cash_processing_id, total_amount, processing_fee_percentage, processing_fee_amount
+        ) VALUES (?, ?, ?, ?)
+      `, [result.insertId, processed_total, processingFeePercentage, processingFeeAmount]);
 
       // Fetch the created record
       const [records] = await db.query(
@@ -66,13 +79,17 @@ const cashProcessingController = {
           r.user_name, r.pickup_location, r.delivery_location,
           b.name as branch_name, b.id as branch_id,
           c.name as client_name, c.id as client_id,
-          t.name as team_name, t.id as team_id
+          t.name as team_name, t.id as team_id,
+          pc.processing_fee_percentage, pc.processing_fee_amount,
+          vu.username as processed_by_username, vu.email as processed_by_email
         FROM cash_processing cp
         LEFT JOIN cash_counts cc ON cp.cash_count_id = cc.id
         LEFT JOIN requests r ON cp.request_id = r.id
         LEFT JOIN branches b ON r.branch_id = b.id
         LEFT JOIN clients c ON b.client_id = c.id
         LEFT JOIN teams t ON r.team_id = t.id
+        LEFT JOIN processing_charges pc ON cp.id = pc.cash_processing_id
+        LEFT JOIN vault_users vu ON cp.processed_by = vu.id
         ORDER BY cp.created_at DESC
       `);
       
@@ -112,13 +129,17 @@ const cashProcessingController = {
           b.name as branch_name,
           c.name as client_name,
           t.name as team_name,
-          t.id as team_id
+          t.id as team_id,
+          pc.processing_fee_percentage, pc.processing_fee_amount,
+          vu.username as processed_by_username, vu.email as processed_by_email
         FROM cash_processing cp
         LEFT JOIN cash_counts cc ON cp.cash_count_id = cc.id
         LEFT JOIN requests r ON cp.request_id = r.id
         LEFT JOIN branches b ON r.branch_id = b.id
         LEFT JOIN clients c ON b.client_id = c.id
         LEFT JOIN teams t ON r.team_id = t.id
+        LEFT JOIN processing_charges pc ON cp.id = pc.cash_processing_id
+        LEFT JOIN vault_users vu ON cp.processed_by = vu.id
         WHERE cp.id = ?
       `, [id]);
       
