@@ -9,9 +9,21 @@ const processingChargesController = {
           pc.*,
           cp.request_id,
           cp.processed_total,
-          cp.expected_total
+          cp.expected_total,
+          r.user_name,
+          r.pickup_location,
+          r.delivery_location,
+          r.pickup_date,
+          b.name as branch_name,
+          c.name as client_name,
+          c.id as client_id,
+          st.name as service_type_name
         FROM processing_charges pc
         JOIN cash_processing cp ON pc.cash_processing_id = cp.id
+        LEFT JOIN requests r ON cp.request_id = r.id
+        LEFT JOIN branches b ON r.branch_id = b.id
+        LEFT JOIN clients c ON b.client_id = c.id
+        LEFT JOIN service_types st ON r.service_type_id = st.id
         ORDER BY pc.created_at DESC
       `);
       
@@ -181,3 +193,4 @@ const processingChargesController = {
 };
 
 module.exports = processingChargesController;
+
