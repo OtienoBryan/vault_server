@@ -35,6 +35,7 @@ const mapRequestFields = (request) => ({
   userId: request.user_id,
   userName: request.user_name,
   serviceTypeId: request.service_type_id,
+  serviceTypeName: request.service_type_name,
   pickupLocation: request.pickup_location,
   deliveryLocation: request.delivery_location,
   pickupDate: request.pickup_date,
@@ -95,9 +96,10 @@ app.get('/api/requests', async (req, res) => {
   try {
     const { status, myStatus } = req.query;
     let query = `
-      SELECT r.*, b.name as branch_name 
+      SELECT r.*, b.name as branch_name, st.name as service_type_name
       FROM requests r
       LEFT JOIN branches b ON r.branch_id = b.id
+      LEFT JOIN service_types st ON r.service_type_id = st.id
     `;
     const params = [];
 
@@ -264,9 +266,13 @@ app.post('/api/requests', async (req, res) => {
       ]
     );
 
-    // Fetch the created request
+    // Fetch the created request with service type name
     const [requests] = await db.query(
-      'SELECT * FROM requests WHERE id = ?',
+      `SELECT r.*, b.name as branch_name, st.name as service_type_name
+       FROM requests r
+       LEFT JOIN branches b ON r.branch_id = b.id
+       LEFT JOIN service_types st ON r.service_type_id = st.id
+       WHERE r.id = ?`,
       [result.insertId]
     );
 
@@ -338,9 +344,13 @@ app.patch('/api/requests/:id', async (req, res) => {
       values
     );
 
-    // Get the updated request
+    // Get the updated request with service type name
     const [requests] = await db.query(
-      'SELECT * FROM requests WHERE id = ?',
+      `SELECT r.*, b.name as branch_name, st.name as service_type_name
+       FROM requests r
+       LEFT JOIN branches b ON r.branch_id = b.id
+       LEFT JOIN service_types st ON r.service_type_id = st.id
+       WHERE r.id = ?`,
       [id]
     );
 
