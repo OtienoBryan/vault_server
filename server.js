@@ -17,6 +17,7 @@ const cashCountController = require('./controllers/cashCountController');
 const vaultController = require('./controllers/vaultController');
 const cashProcessingController = require('./controllers/cashProcessingController');
 const processingChargesController = require('./controllers/processingChargesController');
+const processingFeeController = require('./controllers/processingFeeController');
 const clientUpdateController = require('./controllers/clientUpdateController');
 const atmLoadingTableController = require('./controllers/atmLoadingTableController');
 const authController = require('./controllers/authController');
@@ -445,6 +446,8 @@ app.put('/api/clients/:clientId/branches/:branchId', branchController.updateBran
 app.delete('/api/clients/:clientId/branches/:branchId', branchController.deleteBranch);
 app.get('/api/clients/:clientId/service-charges', serviceChargeController.getServiceCharges);
 app.post('/api/clients/:clientId/service-charges', serviceChargeController.createServiceCharge);
+// Processing fees
+app.get('/api/clients/:clientId/processing-fees', processingFeeController.getByClient);
 app.put('/api/clients/:clientId/service-charges/:chargeId', serviceChargeController.updateServiceCharge);
 app.delete('/api/clients/:clientId/service-charges/:chargeId', serviceChargeController.deleteServiceCharge);
 

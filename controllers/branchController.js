@@ -51,20 +51,35 @@ const branchController = {
   },
 
   createBranch: async (req, res) => {
-    const { client_id, name, address, contact_person, contact_number, email } = req.body;
-    
+    // Prefer clientId from route params; fallback to body for backward compatibility
+    const clientIdParam = req.params.clientId;
+    const clientIdBody = req.body.client_id;
+    const clientId = clientIdParam ?? clientIdBody;
+
+    const { name, address, contact_person, contact_number, contact_phone, email, contact_email } = req.body;
+
+    if (!clientId) {
+      return res.status(400).json({ message: 'client_id is required' });
+    }
+
     try {
+      // Normalize optional fields; prefer requested column names
+      const normalizedNumber = (contact_number ?? contact_phone ?? '').toString();
+      const normalizedEmail = (email ?? contact_email ?? '').toString();
+      const normalizedAddress = (address ?? '').toString();
+      const normalizedContactPerson = (contact_person ?? '').toString();
+
       const [result] = await db.query(
         `INSERT INTO branches (client_id, name, address, contact_person, contact_number, email)
          VALUES (?, ?, ?, ?, ?, ?)`,
-        [client_id, name, address, contact_person, contact_number, email]
+        [clientId, name, normalizedAddress, normalizedContactPerson, normalizedNumber, normalizedEmail]
       );
-      
+
       const [newBranch] = await db.query(
         'SELECT * FROM branches WHERE id = ?',
         [result.insertId]
       );
-      
+
       res.status(201).json(newBranch[0]);
     } catch (error) {
       console.error('Error creating branch:', error);
