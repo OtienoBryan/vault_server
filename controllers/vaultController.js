@@ -63,7 +63,9 @@ const vaultController = {
         amount,
         comment = 'Cash count received',
         cashCountId, // Add cash count ID to update status
-        denominations = {} // New: denomination breakdown
+        denominations = {}, // New: denomination breakdown
+        original_seal_number,
+        new_seal_number
       } = req.body;
 
       if (!amount || amount <= 0) {
@@ -137,11 +139,25 @@ const vaultController = {
         denomUpdateParams.push(vaultId);
         await db.query(denomUpdateSql, denomUpdateParams);
 
-        // Update cash count status if cashCountId is provided
+        // Update cash count status and seal numbers if cashCountId is provided
         if (cashCountId) {
+          const updateFields = ['status = ?'];
+          const updateValues = ['received'];
+          
+          if (original_seal_number !== undefined) {
+            updateFields.push('original_seal_number = ?');
+            updateValues.push(original_seal_number);
+          }
+          if (new_seal_number !== undefined) {
+            updateFields.push('new_seal_number = ?');
+            updateValues.push(new_seal_number);
+          }
+          
+          updateValues.push(cashCountId);
+          
           await db.query(
-            'UPDATE cash_counts SET status = ? WHERE id = ?',
-            ['received', cashCountId]
+            `UPDATE cash_counts SET ${updateFields.join(', ')} WHERE id = ?`,
+            updateValues
           );
         }
 

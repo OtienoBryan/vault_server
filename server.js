@@ -1,5 +1,12 @@
 const express = require('express');
 const cors = require('cors');
+// Compression is optional - install with: npm install compression
+let compression;
+try {
+  compression = require('compression');
+} catch (e) {
+  console.log('Compression module not found. Install with: npm install compression');
+}
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('./database/db');
@@ -25,10 +32,45 @@ require('dotenv').config();
 
 const app = express();
 
+// Performance optimizations
+// Enable compression for all responses (if module is installed)
+if (compression) {
+  app.use(compression({
+    level: 6, // Balance between compression and CPU usage
+    threshold: 1024, // Only compress responses larger than 1KB
+    filter: (req, res) => {
+      // Don't compress if client doesn't support it
+      if (req.headers['x-no-compression']) {
+        return false;
+      }
+      return compression.filter(req, res);
+    }
+  }));
+  console.log('Response compression enabled');
+} else {
+  console.log('Response compression disabled (compression module not installed)');
+}
+
 // CORS: allow all origins for debugging
 app.use(cors({ origin: true, credentials: true }));
 
-app.use(express.json());
+// Increase JSON payload limit for large requests
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Add response time header for monitoring
+app.use((req, res, next) => {
+  const start = Date.now();
+  // Set header before response is sent
+  res.once('finish', () => {
+    // Only log in development, don't set header to avoid conflicts
+    if (process.env.NODE_ENV === 'development') {
+      const duration = Date.now() - start;
+      console.log(`${req.method} ${req.path} - ${duration}ms`);
+    }
+  });
+  next();
+});
 
 // Helper function to map database fields to frontend fields
 const mapRequestFields = (request) => ({
@@ -64,8 +106,9 @@ app.put('/api/users/:id/password', authController.changePassword);
 // Service Types routes
 app.get('/api/service-types', async (req, res) => {
   try {
+    // Optimized: select specific columns
     const [serviceTypes] = await db.query(
-      'SELECT * FROM service_types ORDER BY name'
+      'SELECT id, name, description, created_at, updated_at FROM service_types ORDER BY name'
     );
     res.json(serviceTypes);
   } catch (error) {
@@ -76,8 +119,9 @@ app.get('/api/service-types', async (req, res) => {
 
 app.get('/api/service-types/:id', async (req, res) => {
   try {
+    // Optimized: select specific columns
     const [serviceTypes] = await db.query(
-      'SELECT * FROM service_types WHERE id = ?',
+      'SELECT id, name, description, created_at, updated_at FROM service_types WHERE id = ?',
       [req.params.id]
     );
 
@@ -95,9 +139,18 @@ app.get('/api/service-types/:id', async (req, res) => {
 // Requests routes
 app.get('/api/requests', async (req, res) => {
   try {
-    const { status, myStatus } = req.query;
+    const { status, myStatus, limit, offset } = req.query;
+    // Optimized: select specific columns instead of r.*
+    // Note: client_id comes from branches table, not requests table
     let query = `
-      SELECT r.*, b.name as branch_name, st.name as service_type_name
+      SELECT 
+        r.id, r.user_id, r.user_name, r.service_type_id, r.pickup_location, 
+        r.delivery_location, r.pickup_date, r.description, r.priority, 
+        r.status, r.my_status, r.branch_id, r.team_id, r.staff_id, r.atm_id,
+        r.price, r.latitude, r.longitude, r.created_at, r.updated_at,
+        b.name as branch_name,
+        b.client_id,
+        st.name as service_type_name
       FROM requests r
       LEFT JOIN branches b ON r.branch_id = b.id
       LEFT JOIN service_types st ON r.service_type_id = st.id
@@ -119,6 +172,16 @@ app.get('/api/requests', async (req, res) => {
     }
 
     query += ' ORDER BY r.created_at DESC';
+    
+    // Add pagination
+    if (limit) {
+      query += ' LIMIT ?';
+      params.push(parseInt(limit) || 100);
+      if (offset) {
+        query += ' OFFSET ?';
+        params.push(parseInt(offset) || 0);
+      }
+    }
     
     const [requests] = await db.query(query, params);
     res.json(requests.map(mapRequestFields));
@@ -448,6 +511,8 @@ app.get('/api/clients/:clientId/service-charges', serviceChargeController.getSer
 app.post('/api/clients/:clientId/service-charges', serviceChargeController.createServiceCharge);
 // Processing fees
 app.get('/api/clients/:clientId/processing-fees', processingFeeController.getByClient);
+app.put('/api/clients/:clientId/processing-fees/:feeId', processingFeeController.updateProcessingFee);
+app.delete('/api/clients/:clientId/processing-fees/:feeId', processingFeeController.deleteProcessingFee);
 app.put('/api/clients/:clientId/service-charges/:chargeId', serviceChargeController.updateServiceCharge);
 app.delete('/api/clients/:clientId/service-charges/:chargeId', serviceChargeController.deleteServiceCharge);
 
@@ -471,6 +536,7 @@ app.get('/api/requests/:requestId/cash-count', cashCountController.getCashCountB
 app.post('/api/cash-counts', cashCountController.createCashCount);
 app.put('/api/cash-counts/:id', cashCountController.updateCashCount);
 app.delete('/api/cash-counts/:id', cashCountController.deleteCashCount);
+app.post('/api/cash-counts/:id/decline', cashCountController.declineCashCount);
 
 // Vault routes
 app.get('/api/vault/:vaultId/balance', vaultController.getVaultBalance);
@@ -530,8 +596,23 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
+});
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`\n❌ Port ${PORT} is already in use.`);
+    console.error(`Please either:`);
+    console.error(`  1. Stop the process using port ${PORT}`);
+    console.error(`  2. Set a different port using PORT environment variable (e.g., PORT=5001)`);
+    console.error(`\nTo find what's using the port, run:`);
+    console.error(`  Windows: netstat -ano | findstr :${PORT}`);
+    console.error(`  Mac/Linux: lsof -i :${PORT}\n`);
+  } else {
+    console.error('Server error:', err);
+  }
+  process.exit(1);
 });
 
 module.exports = app; 

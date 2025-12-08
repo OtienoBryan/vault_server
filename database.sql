@@ -213,6 +213,10 @@ CREATE TABLE IF NOT EXISTS cash_counts (
   thousands INT DEFAULT 0,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  status VARCHAR(50) DEFAULT 'pending',
+  decline_reason TEXT,
+  original_seal_number VARCHAR(255),
+  new_seal_number VARCHAR(255),
   FOREIGN KEY (request_id) REFERENCES requests(id) ON DELETE CASCADE
 );
 

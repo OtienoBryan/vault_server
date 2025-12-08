@@ -4,9 +4,20 @@ const processingChargesController = {
   // Get all processing charges
   getAllProcessingCharges: async (req, res) => {
     try {
+      // Optimized query - select specific columns instead of pc.*
+      // Added LIMIT for pagination support (can be extended with req.query)
+      const limit = parseInt(req.query.limit) || 1000; // Default limit to prevent huge responses
+      const offset = parseInt(req.query.offset) || 0;
+      
       const [rows] = await db.query(`
         SELECT 
-          pc.*,
+          pc.id,
+          pc.cash_processing_id,
+          pc.total_amount,
+          pc.processing_fee_percentage,
+          pc.processing_fee_amount,
+          pc.created_at,
+          pc.updated_at,
           cp.request_id,
           cp.processed_total,
           cp.expected_total,
@@ -19,13 +30,14 @@ const processingChargesController = {
           c.id as client_id,
           st.name as service_type_name
         FROM processing_charges pc
-        JOIN cash_processing cp ON pc.cash_processing_id = cp.id
+        INNER JOIN cash_processing cp ON pc.cash_processing_id = cp.id
         LEFT JOIN requests r ON cp.request_id = r.id
         LEFT JOIN branches b ON r.branch_id = b.id
         LEFT JOIN clients c ON b.client_id = c.id
         LEFT JOIN service_types st ON r.service_type_id = st.id
         ORDER BY pc.created_at DESC
-      `);
+        LIMIT ? OFFSET ?
+      `, [limit, offset]);
       
       res.json(rows);
     } catch (error) {

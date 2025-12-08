@@ -7,7 +7,8 @@ const cashCountController = {
       const [cashCounts] = await db.query(`
         SELECT cc.id, cc.request_id, cc.ones, cc.fives, cc.tens, cc.twenties, 
                cc.forties, cc.fifties, cc.hundreds, cc.twoHundreds, cc.fiveHundreds, 
-               cc.thousands, cc.created_at, cc.status as cash_count_status,
+               cc.thousands, cc.created_at, cc.status as cash_count_status, cc.decline_reason,
+               cc.original_seal_number, cc.new_seal_number,
           r.user_name, r.pickup_location, r.delivery_location, r.status as request_status,
           b.name as branch_name, b.id as branch_id,
           c.name as client_name, c.id as client_id,
@@ -53,7 +54,8 @@ const cashCountController = {
       const [cashCounts] = await db.query(`
         SELECT cc.id, cc.request_id, cc.ones, cc.fives, cc.tens, cc.twenties, 
                cc.forties, cc.fifties, cc.hundreds, cc.twoHundreds, cc.fiveHundreds, 
-               cc.thousands, cc.created_at, cc.status as cash_count_status,
+               cc.thousands, cc.created_at, cc.status as cash_count_status, cc.decline_reason,
+               cc.original_seal_number, cc.new_seal_number,
           r.user_name, r.pickup_location, r.delivery_location, r.status as request_status,
           b.name as branch_name,
           c.name as client_name,
@@ -104,7 +106,8 @@ const cashCountController = {
       const [cashCounts] = await db.query(`
         SELECT cc.id, cc.request_id, cc.ones, cc.fives, cc.tens, cc.twenties, 
                cc.forties, cc.fifties, cc.hundreds, cc.twoHundreds, cc.fiveHundreds, 
-               cc.thousands, cc.created_at, cc.status as cash_count_status,
+               cc.thousands, cc.created_at, cc.status as cash_count_status, cc.decline_reason,
+               cc.original_seal_number, cc.new_seal_number,
           r.user_name, r.pickup_location, r.delivery_location, r.status as request_status,
           b.name as branch_name,
           c.name as client_name,
@@ -227,7 +230,10 @@ const cashCountController = {
         hundreds,
         twoHundreds,
         fiveHundreds,
-        thousands
+        thousands,
+        original_seal_number,
+        new_seal_number,
+        status
       } = req.body;
 
       // Check if cash count exists
@@ -252,6 +258,9 @@ const cashCountController = {
       if (twoHundreds !== undefined) updates.twoHundreds = twoHundreds;
       if (fiveHundreds !== undefined) updates.fiveHundreds = fiveHundreds;
       if (thousands !== undefined) updates.thousands = thousands;
+      if (original_seal_number !== undefined) updates.original_seal_number = original_seal_number;
+      if (new_seal_number !== undefined) updates.new_seal_number = new_seal_number;
+      if (status !== undefined) updates.status = status;
 
       if (Object.keys(updates).length === 0) {
         return res.status(400).json({ message: 'No fields to update' });
@@ -298,6 +307,67 @@ const cashCountController = {
       res.json({ message: 'Cash count deleted successfully' });
     } catch (error) {
       console.error('Error deleting cash count:', error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  },
+
+  // Decline cash count
+  declineCashCount: async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { decline_reason } = req.body;
+
+      if (!decline_reason || decline_reason.trim() === '') {
+        return res.status(400).json({ message: 'Decline reason is required' });
+      }
+
+      // Check if cash count exists
+      const [existingCounts] = await db.query(
+        'SELECT id FROM cash_counts WHERE id = ?',
+        [id]
+      );
+
+      if (existingCounts.length === 0) {
+        return res.status(404).json({ message: 'Cash count not found' });
+      }
+
+      // Update cash count status to declined and save decline reason
+      const [updateResult] = await db.query(
+        'UPDATE cash_counts SET status = ?, decline_reason = ? WHERE id = ?',
+        ['declined', decline_reason.trim(), id]
+      );
+
+      if (updateResult.affectedRows === 0) {
+        return res.status(404).json({ message: 'Cash count not found or could not be updated' });
+      }
+
+      // Fetch the updated cash count with all related data
+      const [cashCounts] = await db.query(`
+        SELECT cc.id, cc.request_id, cc.ones, cc.fives, cc.tens, cc.twenties, 
+               cc.forties, cc.fifties, cc.hundreds, cc.twoHundreds, cc.fiveHundreds, 
+               cc.thousands, cc.created_at, cc.status as cash_count_status, cc.decline_reason,
+               cc.original_seal_number, cc.new_seal_number,
+          r.user_name, r.pickup_location, r.delivery_location, r.status as request_status,
+          b.name as branch_name, b.id as branch_id,
+          c.name as client_name, c.id as client_id,
+          t.name as team_name,
+          t.id as team_id
+        FROM cash_counts cc
+        LEFT JOIN requests r ON cc.request_id = r.id
+        LEFT JOIN branches b ON r.branch_id = b.id
+        LEFT JOIN clients c ON b.client_id = c.id
+        LEFT JOIN teams t ON r.team_id = t.id
+        WHERE cc.id = ?
+      `, [id]);
+
+      console.log('Cash count declined. Updated status:', cashCounts[0]?.cash_count_status);
+
+      res.json({ 
+        message: 'Cash count declined successfully',
+        cashCount: cashCounts[0]
+      });
+    } catch (error) {
+      console.error('Error declining cash count:', error);
       res.status(500).json({ message: 'Internal server error' });
     }
   }

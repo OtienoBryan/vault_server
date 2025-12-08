@@ -4,46 +4,19 @@ const clientController = {
   // Get all clients
   getAllClients: async (req, res) => {
     try {
-      console.log('Attempting to fetch all clients...');
-      
-      // Test database connection
-      try {
-        const [test] = await db.query('SELECT 1');
-        console.log('Database connection test successful:', test);
-      } catch (dbError) {
-        console.error('Database connection test failed:', dbError);
-        throw dbError;
-      }
-
-      // Check if clients table exists
-      try {
-        const [tables] = await db.query('SHOW TABLES LIKE "clients"');
-        console.log('Tables check result:', tables);
-        if (tables.length === 0) {
-          throw new Error('Clients table does not exist');
-        }
-      } catch (tableError) {
-        console.error('Table check failed:', tableError);
-        throw tableError;
-      }
-
-      // Fetch all clients
-      const [clients] = await db.query('SELECT * FROM clients ORDER BY created_at DESC');
-      console.log('Clients fetched successfully:', clients);
+      // Optimized query - only select needed columns
+      const [clients] = await db.query(`
+        SELECT id, name, account_number, phone, email, address, created_at, updated_at 
+        FROM clients 
+        ORDER BY created_at DESC
+      `);
       
       res.json(clients);
     } catch (error) {
       console.error('Error in getAllClients:', error);
-      console.error('Error details:', {
-        message: error.message,
-        code: error.code,
-        errno: error.errno,
-        sqlState: error.sqlState,
-        sqlMessage: error.sqlMessage
-      });
       res.status(500).json({ 
         message: 'Failed to fetch clients',
-        error: error.message 
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
       });
     }
   },

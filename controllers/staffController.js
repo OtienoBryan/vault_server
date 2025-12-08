@@ -3,53 +3,19 @@ const db = require('../database/db');
 const staffController = {
   getAllStaff: async (req, res) => {
     try {
-      console.log('Starting to fetch staff list...');
-      
-      // First, check if the staff table exists
-      const [tables] = await db.query('SHOW TABLES LIKE "staff"');
-      console.log('Tables check result:', tables);
-      
-      if (tables.length === 0) {
-        console.error('Staff table does not exist!');
-        return res.status(500).json({ 
-          message: 'Staff table does not exist',
-          error: 'Database table missing'
-        });
-      }
+      // Optimized query - only select needed columns
+      const [staff] = await db.query(`
+        SELECT id, name, email, phone, role_id, branch_id, created_at, updated_at 
+        FROM staff 
+        ORDER BY created_at DESC
+      `);
 
-      // Check the table structure
-      const [columns] = await db.query('DESCRIBE staff');
-      console.log('Staff table structure:', columns);
-
-      // Try to fetch the data
-      console.log('Executing SELECT query...');
-      const [staff] = await db.query('SELECT * FROM staff ORDER BY created_at DESC');
-      console.log('Query result:', staff);
-
-      if (!staff || staff.length === 0) {
-        console.log('No staff records found');
-        return res.json([]);
-      }
-
-      res.json(staff);
+      res.json(staff || []);
     } catch (error) {
       console.error('Error in getAllStaff:', error);
-      console.error('Error details:', {
-        message: error.message,
-        code: error.code,
-        errno: error.errno,
-        sqlState: error.sqlState,
-        sqlMessage: error.sqlMessage
-      });
       res.status(500).json({ 
         message: 'Error fetching staff list',
-        error: error.message,
-        details: process.env.NODE_ENV === 'development' ? {
-          code: error.code,
-          errno: error.errno,
-          sqlState: error.sqlState,
-          sqlMessage: error.sqlMessage
-        } : undefined
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
       });
     }
   },
