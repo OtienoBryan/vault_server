@@ -477,6 +477,51 @@ app.get('/api/runs/summaries', async (req, res) => {
   }
 });
 
+// Run Done endpoint - Get unique pickup dates with total charges
+app.get('/api/runs/done', async (req, res) => {
+  try {
+    const { startDate, endDate, clientId } = req.query;
+    
+    let query = `
+      SELECT 
+        DATE(r.pickup_date) as pickup_date,
+        COUNT(*) as total_runs,
+        SUM(r.price) as total_charges
+      FROM requests r
+      LEFT JOIN branches b ON r.branch_id = b.id
+      WHERE r.my_status = 3
+    `;
+    const params = [];
+
+    // Add date filters
+    if (startDate) {
+      query += ' AND DATE(r.pickup_date) >= ?';
+      params.push(startDate);
+    }
+    if (endDate) {
+      query += ' AND DATE(r.pickup_date) <= ?';
+      params.push(endDate);
+    }
+    
+    // Add client filter
+    if (clientId) {
+      query += ' AND b.client_id = ?';
+      params.push(clientId);
+    }
+
+    query += `
+      GROUP BY DATE(r.pickup_date)
+      ORDER BY pickup_date DESC
+    `;
+    
+    const [results] = await db.query(query, params);
+    res.json(results);
+  } catch (error) {
+    console.error('Error fetching run done data:', error);
+    res.status(500).json({ message: 'Error fetching run done data', error: error.message });
+  }
+});
+
 // Staff routes
 app.get('/api/staff', staffController.getAllStaff);
 app.get('/api/staff/:id', staffController.getStaffById);
@@ -595,7 +640,7 @@ app.use((err, req, res, next) => {
   res.status(500).json({ message: 'Something went wrong!' });
 });
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5005;
 const server = app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
