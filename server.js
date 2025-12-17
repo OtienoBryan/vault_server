@@ -28,6 +28,8 @@ const processingFeeController = require('./controllers/processingFeeController')
 const clientUpdateController = require('./controllers/clientUpdateController');
 const atmLoadingTableController = require('./controllers/atmLoadingTableController');
 const authController = require('./controllers/authController');
+const auditController = require('./controllers/auditController');
+const auditMiddleware = require('./middleware/auditMiddleware');
 require('dotenv').config();
 
 const app = express();
@@ -57,6 +59,9 @@ app.use(cors({ origin: true, credentials: true }));
 // Increase JSON payload limit for large requests
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Audit middleware - log all requests (must be after body parsing middleware)
+app.use(auditMiddleware);
 
 // Add response time header for monitoring
 app.use((req, res, next) => {
@@ -100,8 +105,15 @@ const mapRequestFields = (request) => ({
 
 // Auth routes
 app.post('/api/auth/login', authController.login);
+app.post('/api/auth/logout', authController.logout);
 app.put('/api/users/:id', authController.updateUser);
 app.put('/api/users/:id/password', authController.changePassword);
+
+// Audit logs routes
+app.get('/api/audit-logs', auditController.getAllAuditLogs);
+app.get('/api/audit-logs/:id', auditController.getAuditLogById);
+app.get('/api/audit-logs/staff/:staffId', auditController.getAuditLogsByStaff);
+app.get('/api/audit-logs/action/:action', auditController.getAuditLogsByAction);
 
 // Service Types routes
 app.get('/api/service-types', async (req, res) => {
