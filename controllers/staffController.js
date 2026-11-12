@@ -3,31 +3,27 @@ const db = require('../database/db');
 const staffController = {
   getAllStaff: async (req, res) => {
     try {
-      // Optimized query - only select needed columns
       const [staff] = await db.query(`
-        SELECT id, name, email, phone, role_id, branch_id, created_at, updated_at 
-        FROM staff 
-        ORDER BY created_at DESC
+        SELECT id, name, phone, role_id, role, empl_no, id_no, photo_url, status, created_at, updated_at
+        FROM staff
+        ORDER BY name ASC
       `);
-
       res.json(staff || []);
     } catch (error) {
       console.error('Error in getAllStaff:', error);
-      res.status(500).json({ 
-        message: 'Error fetching staff list',
-        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
-      });
+      res.status(500).json({ message: 'Error fetching staff list' });
     }
   },
 
   getStaffById: async (req, res) => {
     try {
-      const [staff] = await db.query('SELECT * FROM staff WHERE id = ?', [req.params.id]);
-      
+      const [staff] = await db.query(
+        'SELECT id, name, phone, role_id, role, empl_no, id_no, photo_url, status, created_at, updated_at FROM staff WHERE id = ?',
+        [req.params.id]
+      );
       if (staff.length === 0) {
         return res.status(404).json({ message: 'Staff member not found' });
       }
-      
       res.json(staff[0]);
     } catch (error) {
       console.error('Error fetching staff member:', error);
@@ -36,46 +32,43 @@ const staffController = {
   },
 
   createStaff: async (req, res) => {
-    const { name, photo_url, empl_no, id_no, role } = req.body;
-    
+    const { name, phone, empl_no, id_no, role, photo_url } = req.body;
     try {
       const [result] = await db.query(
-        'INSERT INTO staff (name, photo_url, empl_no, id_no, role) VALUES (?, ?, ?, ?, ?)',
-        [name, photo_url, empl_no, id_no, role]
+        'INSERT INTO staff (name, phone, empl_no, id_no, role, photo_url, status) VALUES (?, ?, ?, ?, ?, ?, 1)',
+        [name, phone || null, empl_no, id_no || null, role, photo_url || null]
       );
-      
-      res.status(201).json({
-        id: result.insertId,
-        name,
-        photo_url,
-        empl_no,
-        id_no,
-        role
-      });
+      const [rows] = await db.query(
+        'SELECT id, name, phone, role_id, role, empl_no, id_no, photo_url, status, created_at, updated_at FROM staff WHERE id = ?',
+        [result.insertId]
+      );
+      res.status(201).json(rows[0]);
     } catch (error) {
+      if (error.code === 'ER_DUP_ENTRY') {
+        return res.status(409).json({ message: 'A staff member with that employee number already exists' });
+      }
       console.error('Error creating staff member:', error);
       res.status(500).json({ message: 'Error creating staff member' });
     }
   },
 
   updateStaff: async (req, res) => {
-    const { name, photo_url, empl_no, id_no, role } = req.body;
-    
+    const { name, phone, empl_no, id_no, role, photo_url } = req.body;
     try {
       await db.query(
-        'UPDATE staff SET name = ?, photo_url = ?, empl_no = ?, id_no = ?, role = ? WHERE id = ?',
-        [name, photo_url, empl_no, id_no, role, req.params.id]
+        'UPDATE staff SET name = ?, phone = ?, empl_no = ?, id_no = ?, role = ?, photo_url = ? WHERE id = ?',
+        [name, phone || null, empl_no, id_no || null, role, photo_url || null, req.params.id]
       );
-      
-      res.json({
-        id: parseInt(req.params.id),
-        name,
-        photo_url,
-        empl_no,
-        id_no,
-        role
-      });
+      const [rows] = await db.query(
+        'SELECT id, name, phone, role_id, role, empl_no, id_no, photo_url, status, created_at, updated_at FROM staff WHERE id = ?',
+        [req.params.id]
+      );
+      if (rows.length === 0) return res.status(404).json({ message: 'Staff member not found' });
+      res.json(rows[0]);
     } catch (error) {
+      if (error.code === 'ER_DUP_ENTRY') {
+        return res.status(409).json({ message: 'A staff member with that employee number already exists' });
+      }
       console.error('Error updating staff member:', error);
       res.status(500).json({ message: 'Error updating staff member' });
     }
@@ -83,7 +76,10 @@ const staffController = {
 
   deleteStaff: async (req, res) => {
     try {
-      await db.query('DELETE FROM staff WHERE id = ?', [req.params.id]);
+      const [result] = await db.query('DELETE FROM staff WHERE id = ?', [req.params.id]);
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ message: 'Staff member not found' });
+      }
       res.status(204).send();
     } catch (error) {
       console.error('Error deleting staff member:', error);
@@ -93,37 +89,21 @@ const staffController = {
 
   updateStaffStatus: async (req, res) => {
     const { status } = req.body;
-    const staffId = req.params.id;
-    
     try {
-      console.log('Updating staff status:', { staffId, status });
-      
-      // First check if staff exists
-      const [existingStaff] = await db.query('SELECT * FROM staff WHERE id = ?', [staffId]);
-      
-      if (existingStaff.length === 0) {
+      const [result] = await db.query('UPDATE staff SET status = ? WHERE id = ?', [status, req.params.id]);
+      if (result.affectedRows === 0) {
         return res.status(404).json({ message: 'Staff member not found' });
       }
-      
-      // Update the status
-      await db.query(
-        'UPDATE staff SET status = ? WHERE id = ?',
-        [status, staffId]
+      const [rows] = await db.query(
+        'SELECT id, name, phone, role_id, role, empl_no, id_no, photo_url, status, created_at, updated_at FROM staff WHERE id = ?',
+        [req.params.id]
       );
-      
-      // Get the updated staff record
-      const [updatedStaff] = await db.query('SELECT * FROM staff WHERE id = ?', [staffId]);
-      
-      console.log('Staff status updated successfully:', updatedStaff[0]);
-      res.json(updatedStaff[0]);
+      res.json(rows[0]);
     } catch (error) {
       console.error('Error updating staff status:', error);
-      res.status(500).json({ 
-        message: 'Error updating staff status',
-        error: error.message 
-      });
+      res.status(500).json({ message: 'Error updating staff status' });
     }
   }
 };
 
-module.exports = staffController; 
+module.exports = staffController;

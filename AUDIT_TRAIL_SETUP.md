@@ -173,3 +173,5 @@ GET /api/audit-logs/action/LOGIN_FAILED
 - Logging failures are caught and logged to console but don't affect the main application
 - The system attempts to extract user information from JWT tokens when available
 - Staff information is automatically looked up from the user_id when available
+
+

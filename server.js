@@ -23,6 +23,7 @@ const noticeController = require('./controllers/noticeController');
 const cashCountController = require('./controllers/cashCountController');
 const vaultController = require('./controllers/vaultController');
 const cashProcessingController = require('./controllers/cashProcessingController');
+const cashinTransactionController = require('./controllers/cashinTransactionController');
 const processingChargesController = require('./controllers/processingChargesController');
 const processingFeeController = require('./controllers/processingFeeController');
 const clientUpdateController = require('./controllers/clientUpdateController');
@@ -30,6 +31,8 @@ const atmLoadingTableController = require('./controllers/atmLoadingTableControll
 const authController = require('./controllers/authController');
 const auditController = require('./controllers/auditController');
 const auditMiddleware = require('./middleware/auditMiddleware');
+const vehicleModelController = require('./controllers/vehicleModelController');
+const vehicleController = require('./controllers/vehicleController');
 require('dotenv').config();
 
 const app = express();
@@ -447,7 +450,7 @@ app.get('/api/runs/summaries', async (req, res) => {
     const { year, month, clientId, branchId } = req.query;
     let query = `
       SELECT 
-        DATE(pickup_date) as date,
+        DATE_FORMAT(pickup_date, '%Y-%m-%d') as date,
         COUNT(*) as totalRuns,
         SUM(price) as totalAmount
       FROM requests r
@@ -477,7 +480,7 @@ app.get('/api/runs/summaries', async (req, res) => {
     }
 
     query += `
-      GROUP BY DATE(r.pickup_date)
+      GROUP BY DATE_FORMAT(r.pickup_date, '%Y-%m-%d')
       ORDER BY date DESC
     `;
 
@@ -489,6 +492,48 @@ app.get('/api/runs/summaries', async (req, res) => {
   }
 });
 
+app.get('/api/runs/monthly-summaries', async (req, res) => {
+  try {
+    const { year, clientId, branchId } = req.query;
+    let query = `
+      SELECT
+        MONTH(r.pickup_date) as month,
+        COUNT(*) as totalRuns,
+        SUM(price) as totalAmount
+      FROM requests r
+      LEFT JOIN branches b ON r.branch_id = b.id
+      WHERE r.my_status = 3
+    `;
+    const params = [];
+
+    if (year) {
+      query += ' AND YEAR(r.pickup_date) = ?';
+      params.push(year);
+    }
+
+    if (clientId) {
+      query += ' AND b.client_id = ?';
+      params.push(clientId);
+    }
+
+    if (branchId) {
+      query += ' AND r.branch_id = ?';
+      params.push(branchId);
+    }
+
+    query += `
+      GROUP BY MONTH(r.pickup_date)
+      ORDER BY month ASC
+    `;
+
+    const [summaries] = await db.query(query, params);
+    res.json(summaries);
+  } catch (error) {
+    console.error('Error fetching monthly run summaries:', error);
+    res.status(500).json({ message: 'Error fetching monthly run summaries', error: error.message });
+  }
+});
+
 // Run Done endpoint - Get unique pickup dates with total charges
 app.get('/api/runs/done', async (req, res) => {
   try {
@@ -496,7 +541,7 @@ app.get('/api/runs/done', async (req, res) => {
     
     let query = `
       SELECT 
-        DATE(r.pickup_date) as pickup_date,
+        DATE_FORMAT(r.pickup_date, '%Y-%m-%d') as pickup_date,
         COUNT(*) as total_runs,
         SUM(r.price) as total_charges
       FROM requests r
@@ -522,7 +567,7 @@ app.get('/api/runs/done', async (req, res) => {
     }
 
     query += `
-      GROUP BY DATE(r.pickup_date)
+      GROUP BY DATE_FORMAT(r.pickup_date, '%Y-%m-%d')
       ORDER BY pickup_date DESC
     `;
     
@@ -552,6 +597,34 @@ app.post('/api/upload', upload.single('photo'), uploadController.uploadImage);
 app.post('/api/teams', teamController.createTeam);
 app.get('/api/teams', teamController.getTeams);
 app.get('/api/teams/:id', teamController.getTeamById);
+app.delete('/api/teams/:id', teamController.deleteTeam);
+app.post('/api/teams/:id/vehicles', teamController.assignVehicle);
+app.delete('/api/teams/:id/vehicles/:vehicleId', teamController.removeVehicle);
+
+app.get('/api/teams/:id/requests', async (req, res) => {
+  try {
+    const [requests] = await db.query(
+      `SELECT
+         r.id, r.user_id, r.user_name, r.service_type_id, r.pickup_location,
+         r.delivery_location, r.pickup_date, r.description, r.priority,
+         r.status, r.my_status, r.branch_id, r.team_id, r.staff_id, r.atm_id,
+         r.price, r.latitude, r.longitude, r.created_at, r.updated_at,
+         b.name AS branch_name,
+         b.client_id,
+         st.name AS service_type_name
+       FROM requests r
+       LEFT JOIN branches b ON r.branch_id = b.id
+       LEFT JOIN service_types st ON r.service_type_id = st.id
+       WHERE r.team_id = ?
+       ORDER BY r.pickup_date DESC`,
+      [req.params.id]
+    );
+    res.json(requests.map(mapRequestFields));
+  } catch (error) {
+    console.error('Error fetching team requests:', error);
+    res.status(500).json({ message: 'Error fetching team requests' });
+  }
+});
 
 // Client routes
 app.get('/api/clients', clientController.getAllClients);
@@ -568,6 +641,7 @@ app.get('/api/clients/:clientId/service-charges', serviceChargeController.getSer
 app.post('/api/clients/:clientId/service-charges', serviceChargeController.createServiceCharge);
 // Processing fees
 app.get('/api/clients/:clientId/processing-fees', processingFeeController.getByClient);
+app.post('/api/clients/:clientId/processing-fees', processingFeeController.createProcessingFee);
 app.put('/api/clients/:clientId/processing-fees/:feeId', processingFeeController.updateProcessingFee);
 app.delete('/api/clients/:clientId/processing-fees/:feeId', processingFeeController.deleteProcessingFee);
 app.put('/api/clients/:clientId/service-charges/:chargeId', serviceChargeController.updateServiceCharge);
@@ -607,6 +681,10 @@ app.get('/api/cash-processing/:id', cashProcessingController.getCashProcessingBy
 app.get('/api/cash-counts/:cashCountId/processing', cashProcessingController.getCashProcessingByCashCountId);
 app.post('/api/cash-processing', cashProcessingController.createCashProcessing);
 
+// Cash-In Transactions routes
+app.get('/api/cashin-transactions', cashinTransactionController.getAllCashinTransactions);
+app.get('/api/cashin-transactions/:id', cashinTransactionController.getCashinTransactionById);
+
 // Processing Charges routes
 app.get('/api/processing-charges', processingChargesController.getAllProcessingCharges);
 app.get('/api/processing-charges/:id', processingChargesController.getProcessingChargeById);
@@ -628,6 +706,19 @@ app.get('/api/atm-loading/client/:clientId', atmLoadingTableController.getATMLoa
 app.get('/api/atm-loading/atm/:atmId', atmLoadingTableController.getATMLoadingByATM);
 app.put('/api/atm-loading/:id', atmLoadingTableController.updateATMLoading);
 app.delete('/api/atm-loading/:id', atmLoadingTableController.deleteATMLoading);
+
+// Vehicle Model routes
+app.get('/api/vehicle-models', vehicleModelController.getAll);
+app.post('/api/vehicle-models', vehicleModelController.create);
+app.put('/api/vehicle-models/:id', vehicleModelController.update);
+app.delete('/api/vehicle-models/:id', vehicleModelController.remove);
+
+// Vehicle routes
+app.get('/api/vehicles', vehicleController.getAll);
+app.get('/api/vehicles/:id', vehicleController.getById);
+app.post('/api/vehicles', vehicleController.create);
+app.put('/api/vehicles/:id', vehicleController.update);
+app.delete('/api/vehicles/:id', vehicleController.remove);
 
 // Example API endpoint
 app.get('/api/test', (req, res) => {
