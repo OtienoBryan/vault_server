@@ -9,7 +9,9 @@ const atmLoadingTableController = {
         atm_id,
         denominations,
         loading_date,
-        comment
+        comment,
+        userId,
+        userName
       } = req.body;
 
       console.log('Creating ATM loading record:', {
@@ -17,26 +19,60 @@ const atmLoadingTableController = {
         atm_id,
         denominations,
         loading_date,
-        comment
+        comment,
+        userId,
+        userName
       });
 
       // Validate required fields
       if (!client_id || !atm_id || !denominations || !loading_date) {
-        return res.status(400).json({ 
-          message: 'Client ID, ATM ID, denominations, and loading date are required' 
+        return res.status(400).json({
+          message: 'Client ID, ATM ID, denominations, and loading date are required'
         });
       }
 
       // Validate that the ATM belongs to the client
       const [atmCheck] = await db.query(
-        'SELECT id FROM atms WHERE id = ? AND client_id = ?',
+        'SELECT id, location FROM atms WHERE id = ? AND client_id = ?',
         [atm_id, client_id]
       );
 
       if (atmCheck.length === 0) {
-        return res.status(400).json({ 
-          message: 'ATM not found or does not belong to the specified client' 
+        return res.status(400).json({
+          message: 'ATM not found or does not belong to the specified client'
         });
+      }
+      const atm = atmCheck[0];
+
+      // Resolve what's needed to also create a pending request for this ATM loading
+      let requestContext = null;
+      if (userId && userName) {
+        const [serviceTypeRows] = await db.query(
+          "SELECT id FROM service_types WHERE LOWER(name) LIKE '%atm loading%' LIMIT 1"
+        );
+        const [branchRows] = await db.query(
+          'SELECT id FROM branches WHERE client_id = ? ORDER BY id LIMIT 1',
+          [client_id]
+        );
+
+        if (serviceTypeRows.length === 0) {
+          console.warn('ATM Loading service type not found; skipping pending request creation');
+        } else if (branchRows.length === 0) {
+          console.warn('No branch found for client; skipping pending request creation', client_id);
+        } else {
+          const [chargeRows] = await db.query(
+            'SELECT price FROM service_charges WHERE client_id = ? AND service_type_id = ? LIMIT 1',
+            [client_id, serviceTypeRows[0].id]
+          );
+
+          requestContext = {
+            serviceTypeId: serviceTypeRows[0].id,
+            branchId: branchRows[0].id,
+            price: chargeRows.length > 0 ? chargeRows[0].price : 0,
+          };
+        }
+      } else {
+        console.warn('userId/userName not provided; skipping pending request creation');
       }
 
       // Calculate total amount from denominations
@@ -209,12 +245,35 @@ const atmLoadingTableController = {
           new Date() // created_at
         ]);
 
+        // Also create a pending request for this ATM loading, so it shows up
+        // in the normal requests/runs pipeline
+        let requestId = null;
+        if (requestContext) {
+          const [requestResult] = await db.query(
+            `INSERT INTO requests (
+              user_id, user_name, service_type_id, branch_id, team_id, staff_id, atm_id,
+              pickup_location, delivery_location, pickup_date,
+              description, priority, status, my_status, price,
+              latitude, longitude
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+              userId, userName, requestContext.serviceTypeId, requestContext.branchId,
+              null, null, atm_id,
+              'Vault', atm.location || 'ATM', loading_date,
+              `ATM Loading - ${comment || 'ATM replenishment'}`, 'medium', 'pending', 0,
+              requestContext.price,
+              null, null
+            ]
+          );
+          requestId = requestResult.insertId;
+        }
+
         // Commit transaction
         await db.query('COMMIT');
 
         // Fetch the created record with client and ATM details
         const [record] = await db.query(`
-          SELECT al.*, 
+          SELECT al.*,
             c.name as client_name,
             a.atm_code,
             a.location as atm_location
@@ -230,7 +289,8 @@ const atmLoadingTableController = {
           message: 'ATM loading record created successfully',
           record: record[0],
           newBalance: newBalance,
-          newVaultBalance: newVaultBalance
+          newVaultBalance: newVaultBalance,
+          requestId
         });
 
       } catch (error) {

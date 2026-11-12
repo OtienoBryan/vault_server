@@ -24,6 +24,7 @@ const cashCountController = require('./controllers/cashCountController');
 const vaultController = require('./controllers/vaultController');
 const cashProcessingController = require('./controllers/cashProcessingController');
 const cashinTransactionController = require('./controllers/cashinTransactionController');
+const shiftVehicleCheckController = require('./controllers/shiftVehicleCheckController');
 const processingChargesController = require('./controllers/processingChargesController');
 const processingFeeController = require('./controllers/processingFeeController');
 const clientUpdateController = require('./controllers/clientUpdateController');
@@ -685,6 +686,11 @@ app.post('/api/cash-processing', cashProcessingController.createCashProcessing);
 app.get('/api/cashin-transactions', cashinTransactionController.getAllCashinTransactions);
 app.get('/api/cashin-transactions/:id', cashinTransactionController.getCashinTransactionById);
 
+// Shift Vehicle Checklist routes
+app.get('/api/shift-vehicle-checks', shiftVehicleCheckController.getAllShiftVehicleChecks);
+app.get('/api/shift-vehicle-checks/matrix', shiftVehicleCheckController.getChecklistMatrix);
+app.get('/api/shift-vehicle-checks/:id', shiftVehicleCheckController.getShiftVehicleCheckById);
+
 // Processing Charges routes
 app.get('/api/processing-charges', processingChargesController.getAllProcessingCharges);
 app.get('/api/processing-charges/:id', processingChargesController.getProcessingChargeById);
@@ -763,4 +769,4 @@ server.on('error', (err) => {
   process.exit(1);
 });
 
-module.exports = app; 
+module.exports = app;
